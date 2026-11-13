@@ -1,0 +1,9 @@
+# Configuración para publicar Jungle Fight gratis en Render.com
+services:
+  - type: web
+    name: jungle-fight
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /salud

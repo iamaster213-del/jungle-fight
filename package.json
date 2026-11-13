@@ -1,0 +1,13 @@
+{
+  "name": "jungle-fight",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Jungle Fight: juego de peleas 2D con partidas en línea",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
