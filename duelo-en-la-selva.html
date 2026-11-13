@@ -114,15 +114,14 @@ kbd{font-family:var(--text);font-weight:700;font-size:12px;background:var(--key)
       <dl>
         <dt><kbd>F</kbd> <kbd>F</kbd> <kbd>G</kbd></dt><dd>Patada del trueno: lanza al rival lejos</dd>
         <dt><kbd>F</kbd> <kbd>F</kbd> <kbd>F</kbd></dt><dd>Gancho al cielo: manda al rival por los aires</dd>
-        <dt><kbd>F</kbd> <kbd>F</kbd> <kbd>F</kbd> <kbd>F</kbd></dt><dd>Gancho al cielo + remate del luchador</dd>
-        <dt><kbd>F</kbd> <kbd>F</kbd> <kbd>G</kbd> <kbd>F</kbd></dt><dd>Patada del trueno + remate</dd>
         <dt><kbd>G</kbd> <kbd>G</kbd></dt><dd>Barrida: derriba al rival</dd>
-        <dt><kbd>G</kbd> <kbd>G</kbd> <kbd>G</kbd></dt><dd>Barrida + patada hacha</dd>
-        <dt><kbd>G</kbd> <kbd>G</kbd> <kbd>G</kbd> <kbd>F</kbd></dt><dd>Barrida, hacha y remate</dd>
         <dt><kbd>F</kbd> <kbd>G</kbd> <kbd>G</kbd></dt><dd>Puño, patada y barrida</dd>
         <dt><kbd>G</kbd> <kbd>F</kbd> <kbd>F</kbd></dt><dd>Patada, codazo y gancho al cielo</dd>
-        <dt><kbd>G</kbd> <kbd>F</kbd> <kbd>G</kbd></dt><dd>Patada, codazo y patada del trueno</dd>
-        <dt>Adelante + <kbd>F</kbd></dt><dd>Embestida hacia el rival (sigue con F o G)</dd>
+        <dt><kbd>G</kbd> <kbd>F</kbd> <kbd>G</kbd></dt><dd>Patada, codazo y remate del luchador</dd>
+        <dt>Adelante + <kbd>F</kbd> <kbd>G</kbd></dt><dd>Embestida y remate del luchador</dd>
+        <dt>Derribo</dt><dd>Al tercer golpe seguido (o con mucho daño) el rival cae al suelo y no se le puede pegar hasta que se levanta.</dd>
+        <dt><kbd>A</kbd> <kbd>A</kbd> / <kbd>D</kbd> <kbd>D</kbd></dt><dd>Doble toque rápido: mini-dash hacia ese lado</dd>
+        <dt>Guardia</dt><dd>La barra azul bajo la vida se gasta al bloquear. Si se vacía, la guardia se rompe y quedas aturdido.</dd>
         <dt>Adelante + <kbd>G</kbd></dt><dd>Patada hacha desde arriba</dd>
         <dt><kbd>W</kbd> <kbd>G</kbd> <kbd>F</kbd> <kbd>G</kbd></dt><dd>Combo aéreo: patada, golpe y picada</dd>
         <dt>Remates</dt><dd>Yagua: Zarpazo triple · Ceiba: Golpe de tronco · Kaimán: Coletazo · Colibrí: Pico veloz · Tucán: Tornado de plumas · Aullador: Paliza de la selva · Tejedora: Ocho patas · Tapir: Trompazo</dd>
@@ -244,15 +243,24 @@ const RMAP={left:['KeyA','ArrowLeft'],right:['KeyD','ArrowRight'],up:['KeyW','Ar
 class Remote{
   get(){
     const m=RMAP,h=a=>a.some(k=>remoteKeys.has(k)),p=a=>a.some(k=>remotePressed.has(k));
-    const out={left:h(m.left),right:h(m.right),up:p(m.up)||h(m.up),down:h(m.down),punch:p(m.punch),kick:p(m.kick),special:p(m.special)};
+    const out={left:h(m.left),right:h(m.right),up:p(m.up)||h(m.up),down:h(m.down),punch:p(m.punch),kick:p(m.kick),special:p(m.special),dash:dashTap(this,p,m)};
     remotePressed.clear();return out;
   }
 }
+// doble toque rápido a un lado (A A o D D) = mini-dash
+function dashTap(ctl,p,m){
+  let dash=0;
+  for(const [dir,arr] of [[-1,m.left],[1,m.right]]){
+    if(!p(arr))continue;
+    if(ctl.lt&&ctl.lt.dir===dir&&frame-ctl.lt.f<=14){dash=dir;ctl.lt=null}else ctl.lt={dir,f:frame};
+  }
+  return dash;
+}
 class Human{
-  constructor(i){this.m=MAPS[i]}
+  constructor(i){this.m=MAPS[i];this.lt=null}
   get(){
     const m=this.m,h=a=>a.some(k=>keys.has(k)),p=a=>a.some(k=>pressed.has(k));
-    return{left:h(m.left),right:h(m.right),up:p(m.up)||h(m.up),down:h(m.down),punch:p(m.punch),kick:p(m.kick),special:p(m.special)};
+    return{left:h(m.left),right:h(m.right),up:p(m.up)||h(m.up),down:h(m.down),punch:p(m.punch),kick:p(m.kick),special:p(m.special),dash:dashTap(this,p,m)};
   }
 }
 /* Dificultad de la CPU: 1 = normal. Con 1.15 reacciona, bloquea, ataca y encadena un 15 % más,
@@ -289,6 +297,7 @@ class AI{
     if(spOk&&(sp==='grab'||sp==='howl')&&r<0.06*lv){out.special=true;this.cool=wait(20);return out}
     if(dist>260){
       if(spOk&&r<0.04*lv){out.special=true;this.cool=wait(30)}
+      else if(r<0.06){out.dash=to==='right'?1:-1;this.cool=wait(16)}
       else{this.moveDir=to;this.moveT=10;out[to]=true}
     }else if(dist>110){
       if(r<0.025){out.up=true;out[to]=true}
@@ -323,28 +332,28 @@ const DEFS=[
   {name:'TUCÁN',desc:['Vigía de las copas.','Ataca desde lejos con su pico.'],stats:[4,3,3],speed:1.1,power:0.95,tough:1.0,size:0.97,hud:'#ffb02e',
    main:'#26262e',dark:'#16161b',skin:'#f2e6c8',skinDark:'#c9b994',pants:'#3a3a46',pantsDark:'#24242c',band:'#ff9a1a',spot:'#f2e6c8',fx:'#ffd166',fx2:'#ff7a1a',special:'PICO BUMERÁN',sp:'boomerang',deco:'toucan',sigStyle:'dash',
    alt:{main:'#2a3a6a',dark:'#1a2444',spot:'#f2e6c8',hud:'#7ab0ff'}},
-  {name:'AULLADOR',desc:['Mono rugiente del dosel.','Su grito derriba a cualquiera.'],stats:[3,4,3],speed:0.95,power:1.05,tough:0.95,size:1.03,hud:'#e0704a',
+  {name:'AULLADOR',desc:['Mono rugiente del dosel.','Su grito derriba a cualquiera.'],stats:[3,4,3],speed:0.95,power:1.09,tough:0.93,size:1.03,hud:'#e0704a',
    main:'#8a3a22',dark:'#5a2414',skin:'#3a2418',skinDark:'#2a1810',pants:'#4a3a2a',pantsDark:'#30261a',band:'#e8c06a',spot:'#5a2414',fx:'#ffe08a',fx2:'#ff9a4a',special:'AULLIDO SALVAJE',sp:'howl',deco:'mane',sigStyle:'fireball',
    alt:{main:'#3a3a3a',dark:'#222222',spot:'#2a2a2a',hud:'#b0b0b0'}},
-  {name:'TEJEDORA',desc:['Araña de la cueva oscura.','Atrapa al rival en su red.'],stats:[4,2,3],speed:1.15,power:0.9,tough:1.0,size:0.96,hud:'#e85a7a',
+  {name:'TEJEDORA',desc:['Araña de la cueva oscura.','Atrapa al rival en su red.'],stats:[4,3,3],speed:1.15,power:0.98,tough:0.97,size:0.96,hud:'#e85a7a',
    main:'#3a1a3a',dark:'#24102a',skin:'#c9a0b0',skinDark:'#9a7080',pants:'#1a1a24',pantsDark:'#101018',band:'#e83a5a',spot:'#e83a5a',fx:'#f4f4ff',fx2:'#b8b8e0',special:'RED DE SEDA',sp:'web',deco:'spider',sigStyle:'dash',
    alt:{main:'#1a3a3a',dark:'#10242a',spot:'#3ae8c0',hud:'#5ae8c8'}},
-  {name:'TAPIR',desc:['Gigante tranquilo del pantano.','Hace temblar la tierra.'],stats:[1,4,4],speed:0.82,power:1.06,tough:0.88,size:1.12,hud:'#9aa6c0',
+  {name:'TAPIR',desc:['Gigante tranquilo del pantano.','Hace temblar la tierra.'],stats:[1,4,4],speed:0.82,power:1.08,tough:0.84,size:1.12,hud:'#9aa6c0',
    main:'#5a5a66',dark:'#3a3a44',skin:'#8a8a96',skinDark:'#6a6a76',pants:'#3a2e24',pantsDark:'#261e18',band:'#5ab0e0',spot:'#3a3a44',fx:'#d8b080',fx2:'#8a6a40',special:'ESTAMPIDA',sp:'quake',deco:'trunk',sigStyle:'grab',
    alt:{main:'#6a5040',dark:'#44342a',spot:'#44342a',hud:'#c8a080'}}
 ];
 const altDef=d=>({...d,...d.alt});
 const ATK={
   punch:{startup:4,active:4,recovery:9,dmg:6,reach:58,w:46,h:32,yOff:-130,stun:15,knock:4,meter:7},
-  kick:{startup:8,active:5,recovery:15,dmg:10,reach:74,w:62,h:38,yOff:-104,stun:19,knock:7,meter:9,heavy:true},
+  kick:{startup:8,active:5,recovery:15,dmg:10,reach:74,w:62,h:38,yOff:-104,stun:19,knock:5,meter:9,heavy:true},
   jkick:{startup:4,active:14,recovery:4,dmg:9,reach:50,w:52,h:46,yOff:-50,stun:17,knock:5,meter:8,air:true},
   special:{startup:14,active:1,recovery:22,dmg:0},
   punch2:{startup:5,active:4,recovery:11,dmg:7,reach:62,w:48,h:32,yOff:-128,stun:17,knock:4,meter:8},
   uppercut:{startup:6,active:5,recovery:20,dmg:10,reach:58,w:62,h:64,yOff:-145,stun:28,knock:2,meter:10,heavy:true,launch:-12},
   finisher:{startup:8,active:6,recovery:22,dmg:13,reach:80,w:72,h:46,yOff:-122,stun:26,knock:13,meter:12,heavy:true},
-  elbow:{startup:5,active:4,recovery:12,dmg:8,reach:50,w:48,h:36,yOff:-126,stun:19,knock:3,meter:8},
+  elbow:{startup:5,active:4,recovery:12,dmg:8,reach:64,w:60,h:36,yOff:-126,stun:19,knock:3,meter:8},
   sweep:{startup:7,active:5,recovery:20,dmg:9,reach:78,w:74,h:26,yOff:-16,stun:30,knock:3,meter:9,heavy:true,launch:-6},
-  lunge:{startup:6,active:5,recovery:14,dmg:8,reach:60,w:50,h:34,yOff:-128,stun:18,knock:5,meter:8,lunge:8},
+  lunge:{startup:6,active:5,recovery:14,dmg:8,reach:60,w:50,h:34,yOff:-128,stun:18,knock:5,meter:8,lunge:3.5},
   axe:{startup:10,active:6,recovery:18,dmg:12,reach:84,w:80,h:120,yOff:-110,stun:26,knock:2,meter:10,heavy:true,launch:-4},
   airPunch:{startup:3,active:8,recovery:6,dmg:7,reach:44,w:48,h:44,yOff:-90,stun:16,knock:4,meter:7,air:true},
   dive:{startup:3,active:40,recovery:2,dmg:10,reach:46,w:54,h:50,yOff:-30,stun:20,knock:7,meter:9,air:true,heavy:true,dive:true}
@@ -354,12 +363,12 @@ const CHAIN={
   punch:{punch:'punch2',kick:'kick',special:'special'},
   punch2:{punch:'uppercut',kick:'finisher',special:'special'},
   kick:{kick:'sweep',punch:'elbow',special:'special'},
-  elbow:{punch:'uppercut',kick:'finisher',special:'special'},
-  lunge:{punch:'punch2',kick:'finisher',special:'special'},
-  uppercut:{punch:'signature',special:'special'},
-  finisher:{punch:'signature',special:'special'},
-  sweep:{kick:'axe',punch:'signature',special:'special'},
-  axe:{punch:'signature',special:'special'},
+  elbow:{punch:'uppercut',kick:'signature',special:'special'},
+  lunge:{punch:'punch2',kick:'signature',special:'special'},
+  uppercut:{special:'special'},
+  finisher:{special:'special'},
+  sweep:{special:'special'},
+  axe:{special:'special'},
   signature:{special:'special'},
   jkick:{punch:'airPunch',kick:'airPunch'},
   airPunch:{kick:'dive',punch:'dive'}
@@ -367,31 +376,31 @@ const CHAIN={
 const MOVE_NAMES={uppercut:'¡GANCHO AL CIELO!',finisher:'¡PATADA DEL TRUENO!',sweep:'¡BARRIDA!',axe:'¡PATADA HACHA!',dive:'¡PICADA!'};
 /* Remate propio de cada luchador (4.º golpe de las cadenas largas) */
 const SIGS={
-  fireball:{name:'ZARPAZO TRIPLE',startup:5,active:18,recovery:16,dmg:5,reach:62,w:56,h:60,yOff:-120,stun:16,knock:2,meter:5,multi:6,lunge:4},
-  roots:{name:'GOLPE DE TRONCO',startup:8,active:6,recovery:20,dmg:15,reach:70,w:84,h:90,yOff:-115,stun:28,knock:14,meter:10,heavy:true,launch:-8,lunge:5},
-  grab:{name:'COLETAZO',startup:8,active:8,recovery:22,dmg:14,reach:66,w:110,h:70,yOff:-95,stun:26,knock:12,meter:10,heavy:true,launch:-6,lunge:3},
-  dash:{name:'PICO VELOZ',startup:3,active:20,recovery:14,dmg:4,reach:58,w:56,h:50,yOff:-125,stun:14,knock:1.5,meter:4,multi:5,lunge:4},
-  boomerang:{name:'TORNADO DE PLUMAS',startup:4,active:18,recovery:14,dmg:5,reach:60,w:60,h:60,yOff:-122,stun:15,knock:2,meter:5,multi:6,lunge:4},
-  howl:{name:'PALIZA DE LA SELVA',startup:5,active:20,recovery:16,dmg:4.5,reach:62,w:58,h:60,yOff:-120,stun:15,knock:1.5,meter:4,multi:5,lunge:4},
-  web:{name:'OCHO PATAS',startup:3,active:24,recovery:16,dmg:3.5,reach:58,w:56,h:56,yOff:-124,stun:13,knock:1.5,meter:4,multi:5,lunge:4},
-  quake:{name:'TROMPAZO',startup:9,active:7,recovery:22,dmg:15,reach:68,w:100,h:80,yOff:-100,stun:26,knock:13,meter:10,heavy:true,launch:-6,lunge:3}
+  fireball:{name:'ZARPAZO TRIPLE',startup:5,active:18,recovery:16,dmg:5,reach:62,w:56,h:60,yOff:-120,stun:16,knock:2,meter:5,multi:6,lunge:2},
+  roots:{name:'GOLPE DE TRONCO',startup:8,active:6,recovery:20,dmg:15,reach:70,w:84,h:90,yOff:-115,stun:28,knock:14,meter:10,heavy:true,launch:-8,lunge:2.5},
+  grab:{name:'COLETAZO',startup:8,active:8,recovery:22,dmg:14,reach:66,w:110,h:70,yOff:-95,stun:26,knock:12,meter:10,heavy:true,launch:-6,lunge:1.5},
+  dash:{name:'PICO VELOZ',startup:3,active:20,recovery:14,dmg:4,reach:58,w:56,h:50,yOff:-125,stun:14,knock:1.5,meter:4,multi:5,lunge:2},
+  boomerang:{name:'TORNADO DE PLUMAS',startup:4,active:18,recovery:14,dmg:5,reach:60,w:60,h:60,yOff:-122,stun:15,knock:2,meter:5,multi:6,lunge:2},
+  howl:{name:'PALIZA DE LA SELVA',startup:5,active:20,recovery:16,dmg:4.5,reach:62,w:58,h:60,yOff:-120,stun:15,knock:1.5,meter:4,multi:5,lunge:2},
+  web:{name:'OCHO PATAS',startup:3,active:24,recovery:16,dmg:3.5,reach:58,w:56,h:56,yOff:-124,stun:13,knock:1.5,meter:4,multi:5,lunge:2},
+  quake:{name:'TROMPAZO',startup:9,active:7,recovery:22,dmg:15,reach:68,w:100,h:80,yOff:-100,stun:26,knock:13,meter:10,heavy:true,launch:-6,lunge:1.5}
 };
 /* Especial propio de cada luchador */
 const SPECIALS={
   fireball:{startup:14,active:1,recovery:22,dmg:0},
   roots:{startup:16,active:1,recovery:24,dmg:0},
-  grab:{startup:10,active:6,recovery:28,dmg:18,reach:46,w:62,h:96,yOff:-90,stun:30,knock:9,meter:0,heavy:true,launch:-10,unblockable:true,grab:true},
-  dash:{startup:5,active:20,recovery:8,dmg:6,reach:18,w:84,h:120,yOff:-90,stun:16,knock:1,meter:5,multi:5,dash:true},
+  grab:{startup:10,active:6,recovery:28,dmg:18,reach:46,w:62,h:96,yOff:-90,stun:30,knock:9,meter:0,heavy:true,launch:-10,unblockable:true,grab:true,sp:true},
+  dash:{startup:5,active:20,recovery:8,dmg:6,reach:18,w:84,h:120,yOff:-90,stun:16,knock:1,meter:5,multi:5,dash:true,sp:true},
   boomerang:{startup:12,active:1,recovery:18,dmg:0},
-  howl:{startup:12,active:6,recovery:20,dmg:12,reach:120,w:190,h:150,yOff:-95,stun:22,knock:14,meter:0,heavy:true},
+  howl:{startup:12,active:6,recovery:20,dmg:12,reach:120,w:190,h:150,yOff:-95,stun:22,knock:14,meter:0,heavy:true,sp:true},
   web:{startup:12,active:1,recovery:18,dmg:0},
   quake:{startup:16,active:1,recovery:22,dmg:0}
 };
-const ROOTS={dmg:12,stun:26,knock:3,meter:6,heavy:true,launch:-13};
-const PROJ={dmg:13,stun:22,knock:7,meter:6,heavy:true};
-const BOOM={dmg:7,stun:18,knock:4,meter:5};
-const WEB={dmg:5,stun:44,knock:1,meter:4,web:true};
-const QUAKE={dmg:11,stun:24,knock:6,meter:6,heavy:true,launch:-7,unblockable:true};
+const ROOTS={dmg:12,stun:26,knock:3,meter:6,heavy:true,launch:-13,sp:true};
+const PROJ={dmg:13,stun:22,knock:7,meter:6,heavy:true,sp:true};
+const BOOM={dmg:7,stun:18,knock:4,meter:5,sp:true};
+const WEB={dmg:5,stun:44,knock:1,meter:4,web:true,sp:true};
+const QUAKE={dmg:11,stun:24,knock:6,meter:6,heavy:true,launch:-7,unblockable:true,sp:true};
 
 class Fighter{
   constructor(idx){this.idx=idx;this.def=DEFS[idx];this.wins=0;this.meter=0;this.reset()}
@@ -399,16 +408,23 @@ class Fighter{
     this.x=this.idx===0?300:660;this.y=GROUND;this.vx=0;this.vy=0;
     this.facing=this.idx===0?1:-1;this.hp=100;this.dispHp=100;
     this.state='idle';this.st=0;this.atk=null;this.atkName='';this.hasHit=false;
-    this.stun=0;this.combo=0;this.flash=0;this.walkPhase=0;this.airAtkUsed=false;this.buf=null;
+    this.stun=0;this.combo=0;this.comboDmg=0;this.flash=0;this.walkPhase=0;this.airAtkUsed=false;this.buf=null;
+    this.guard=100;this.guardT=0;this.dashCd=0;this.dashDir=0;
   }
   get grounded(){return this.y>=GROUND&&this.vy>=0}
   set(s){this.state=s;this.st=0;this.dashing=false}
   startAttack(n){
     this.atk=n==='special'?SPECIALS[this.def.sp]:n==='signature'?SIGS[this.def.sp]:ATK[n];this.atkName=n;this.set('attack');this.hasHit=false;
-    if(n==='special'){this.meter-=50;sfx.special()}else sfx.whoosh();
+    if(n==='special'){
+      this.meter-=50;sfx.special();
+      // destello de especial: la pantalla se oscurece y todo se congela un instante
+      superFlash={t:16,x:this.x,y:this.y-110*(this.def.size||1),col:this.def.fx,col2:this.def.fx2};hitstop=Math.max(hitstop,7);shake=Math.max(shake,4);
+    }else sfx.whoosh();
     if(!this.atk.air)this.vx=0;
   }
   hurtbox(){
+    // en el suelo o levantándose no se le puede golpear
+    if(this.state==='kd'||this.state==='down'||this.state==='getup')return null;
     // el tamaño del luchador cambia lo fácil que es acertarle
     const s=this.state,z=this.def.size||1;
     if(s==='block'||s==='blockstun')return{x:this.x-26*z,y:this.y-128*z,w:52*z,h:128*z};
@@ -420,7 +436,9 @@ class Fighter{
     return{x:this.x+this.facing*a.reach-a.w/2,y:this.y+a.yOff-a.h/2,w:a.w,h:a.h};
   }
   update(inp,opp){
-    this.st++;if(this.flash>0)this.flash--;
+    this.st++;if(this.flash>0)this.flash--;if(this.dashCd>0)this.dashCd--;
+    // la guardia se recupera sola si pasa un rato sin bloquear
+    if(this.state!=='block'&&this.state!=='blockstun'&&this.state!=='dizzy'){if(++this.guardT>45)this.guard=Math.min(100,this.guard+0.35)}
     // búfer de ataques: recuerda el botón unos fotogramas para poder encadenar
     if(inp.punch)this.buf={k:'punch',t:9};
     else if(inp.kick)this.buf={k:'kick',t:9};
@@ -434,13 +452,27 @@ class Fighter{
       const mv=chainTo==='signature'?'¡'+SIGS[this.def.sp].name+'!':MOVE_NAMES[chainTo];
       if(mv)popups.push({x:this.x,y:this.y-230,text:mv,life:50,color:this.def.hud});
     }
-    else if(s==='ko'||s==='win'){/* solo física */}
-    else if(s==='hit'){this.stun--;if(this.stun<=0&&this.grounded){this.set('idle');this.combo=0}}
+    else if(s==='ko'||s==='win'||s==='kd'){/* solo física: kd pasa a "down" al tocar el suelo */}
+    else if(s==='down'){if(this.st>=30)this.set('getup')}
+    else if(s==='getup'){if(this.st>=14){this.set('idle');this.combo=0;this.comboDmg=0}}
+    else if(s==='dizzy'){if(this.st>=this.stun){this.set('idle');this.guard=60}}
+    else if(s==='dashmove'){
+      // mini-dash: se puede cortar con un golpe
+      if(bk==='punch'||bk==='kick'){this.buf=null;this.startAttack(bk)}
+      else{
+        const fwd=this.dashDir===this.facing;
+        this.vx=this.dashDir*(fwd?13:10)*this.def.speed*Math.max(0,1-this.st/13);
+        if(this.st%3===0)particles.push({x:this.x-this.dashDir*16,y:GROUND-4,vx:-this.dashDir,vy:-0.6,life:14,max:14,size:5,color:'rgba(200,180,140,0.7)',g:0});
+        if(this.st>=12){this.set('idle');this.vx=0}
+      }
+    }
+    else if(s==='hit'){this.stun--;if(this.stun<=0&&this.grounded){this.set('idle');this.combo=0;this.comboDmg=0}}
     else if(s==='blockstun'){this.stun--;if(this.stun<=0)this.set(inp.down?'block':'idle')}
     else if(s==='attack'){
       const a=this.atk,t=this.st;
       if(this.atkName==='special'){
         const sp=this.def.sp;
+        if(t===a.startup){addBurst(this.x+this.facing*50,this.y-110,this.def.fx,55,5);sparks(this.x+this.facing*50,this.y-110,14,this.def.fx,this.def.fx2)}
         if(sp==='fireball'&&t===a.startup)spawnProjectile(this);
         if(sp==='boomerang'&&t===a.startup)spawnProjectile(this,{kind:'boom',vx:this.facing*11,vx0:this.facing*11,data:BOOM,hitDir:0});
         if(sp==='web'&&t===a.startup)spawnProjectile(this,{style:'web',vx:this.facing*7.5,data:WEB});
@@ -473,11 +505,13 @@ class Fighter{
         else if(bk==='kick'){this.buf=null;this.startAttack(fwd?'axe':'kick')}
         else if(bk==='special'&&this.meter>=50){this.buf=null;this.startAttack('special')}
         else if(inp.up){
-          this.vy=-16;this.vx=(inp.right?1:0)-(inp.left?1:0);this.vx*=4.8*this.def.speed;this.set('jump');sfx.jump();
+          this.vy=-16;this.vx=(inp.right?1:0)-(inp.left?1:0);this.vx*=5.5*this.def.speed;this.set('jump');sfx.jump();
+        }else if(inp.dash&&this.dashCd<=0){
+          this.dashDir=inp.dash;this.set('dashmove');this.dashCd=26;sfx.whoosh();dust(this.x,GROUND,5);shake=Math.max(shake,1.5);
         }else if(inp.down){if(s!=='block')this.set('block');this.vx=0}
         else{
           const dir=(inp.right?1:0)-(inp.left?1:0);
-          this.vx=dir*(dir===this.facing?4.3:3.4)*this.def.speed;
+          this.vx=dir*(dir===this.facing?4.95:3.9)*this.def.speed;
           const ns=dir?'walk':'idle';if(s!==ns)this.set(ns);
           this.walkPhase+=dir*this.facing*0.28;
         }
@@ -489,47 +523,72 @@ class Fighter{
       if(this.y>=GROUND){
         this.y=GROUND;this.vy=0;
         if(this.state==='jump'){this.set('idle');this.vx=0}
-        if(this.state==='ko'){this.vx*=0.4;dust(this.x,GROUND,10)}
+        if(this.state==='kd'){this.set('down');this.vx*=0.35;dust(this.x,GROUND,12);shake=Math.max(shake,5);sfx.heavy()}
+        else if(this.state==='ko'){this.vx*=0.4;dust(this.x,GROUND,10)}
         else dust(this.x,GROUND,4);
       }
     }else{
       this.x+=this.vx;
-      if(['hit','blockstun','ko','win'].includes(this.state))this.vx*=0.84;
+      if(['hit','blockstun','ko','win','down','getup','dizzy'].includes(this.state))this.vx*=0.84;
     }
     this.x=clamp(this.x,40,W-40);
     this.dispHp=this.dispHp>this.hp?Math.max(this.hp,this.dispHp-0.45):this.hp;
   }
 }
 
-function overlap(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
+function overlap(a,b){return !!a&&!!b&&a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
 
+/* Reglas de combo: al 3.er golpe seguido (o con mucho daño acumulado) el rival sale despedido al suelo
+   y no se le puede pegar hasta que se levanta. Los golpes de varios impactos cuentan menos. */
+const KD_HITS=3,KD_DMG=24,KNOCK_MULT=1.35;
 function applyHit(att,def,a,dir,px,py){
   if(def.state==='ko'||phase!=='fight')return;
   const blocking=(def.state==='block'||def.state==='blockstun')&&def.grounded&&!a.unblockable;
   if(a.grab){att.vx=0;popups.push({x:att.x,y:att.y-230,text:'¡'+att.def.special+'!',life:55,color:att.def.hud})}
   const dmg=a.dmg*att.def.power*def.def.tough;
   if(blocking){
-    def.hp-=dmg*0.15;def.set('blockstun');def.stun=11;def.vx=dir*a.knock*0.9;def.atk=null;
+    def.hp-=dmg*0.15;def.set('blockstun');def.stun=11;def.vx=dir*a.knock*KNOCK_MULT;def.atk=null;
     att.meter=Math.min(100,att.meter+a.meter*0.4);def.meter=Math.min(100,def.meter+3);
-    sparks(px,py,8,'#cfe8ff','#7fb2ff');sfx.block();hitstop=3;
+    sparks(px,py,8,'#cfe8ff','#7fb2ff');sfx.block();hitstop=3;shake=Math.max(shake,2.5);
+    // la guardia se gasta con cada golpe bloqueado; si se rompe, queda aturdido
+    def.guard-=dmg*2.2+6;def.guardT=0;
+    if(def.guard<=0){
+      def.guard=0;def.set('dizzy');def.stun=70;def.vx=dir*4;
+      popups.push({x:def.x,y:def.y-215,text:'¡GUARDIA ROTA!',life:70,color:'#7fb2ff'});
+      sparks(px,py,26,'#ffffff','#7fb2ff');addBurst(px,py,'#7fb2ff',70);sfx.heavy();hitstop=10;shake=10;screenFlash=4;
+    }
   }else{
-    def.combo=def.state==='hit'?def.combo+1:1;
-    const mult=Math.max(0.5,1-0.1*(def.combo-1));
-    def.hp-=dmg*mult;def.set('hit');def.stun=a.stun;def.vx=dir*a.knock;def.atk=null;def.flash=8;
-    if(a.launch){def.vy=a.launch}
-    else if(!def.grounded||def.y<GROUND){def.vy=-5}
+    const chain=def.state==='hit'||def.state==='dizzy';
+    def.combo=chain?def.combo+1:1;
+    def.comboDmg=chain?def.comboDmg:0;
+    const mult=Math.max(0.4,1-0.15*(def.combo-1));
+    def.hp-=dmg*mult;def.comboDmg+=dmg*mult;def.atk=null;def.flash=8;
+    const kd=a.launch||a.kd||def.combo>=KD_HITS+(a.multi?3:0)||def.comboDmg>=KD_DMG;
+    if(kd){
+      // derribo: sale despedido, cae y queda en el suelo un momento
+      def.set('kd');def.vy=Math.min(a.launch||-8,-7);def.vx=dir*(6+a.knock*0.45);
+      if(def.combo>=2)popups.push({x:def.x,y:def.y-235,text:'¡DERRIBADO!',life:50,color:'#ff9a4a'});
+      addBurst(px,py,att.def.fx,60);
+    }else{
+      def.set('hit');def.stun=a.stun;def.vx=dir*a.knock*KNOCK_MULT;
+      if(!def.grounded||def.y<GROUND)def.vy=-5;
+    }
     att.meter=Math.min(100,att.meter+a.meter);def.meter=Math.min(100,def.meter+a.meter*0.6);
     sparks(px,py,a.heavy?18:12,'#ffffff',att.def.fx);
-    hitstop=a.heavy?8:5;shake=a.heavy?9:5;
+    hitstop=a.heavy||kd?8:5;shake=Math.max(shake,a.heavy||kd?10:6);
     a.heavy?sfx.heavy():sfx.hit();
+    // impacto de especial: estallido grande, destello y más sacudida
+    if(a.sp){addBurst(px,py,att.def.fx,110);addBurst(px,py,att.def.fx2,70,4);sparks(px,py,30,att.def.fx,att.def.fx2);shake=13;screenFlash=5;hitstop=10}
     if(def.combo>=2){
       popups=popups.filter(p=>p.owner!==def);
-      popups.push({x:def.x,y:def.y-200,text:def.combo>=4?'¡COMBO SALVAJE! ×'+def.combo:'COMBO ×'+def.combo,life:60,color:att.def.fx,owner:def});
-      if(def.combo>=4)shake=12;
+      popups.push({x:def.x,y:def.y-200,text:'COMBO ×'+def.combo,life:60,color:att.def.fx,owner:def});
     }
   }
   if(def.hp<=0)def.hp=0;
 }
+/* ---------- efectos: anillos de impacto, destello de especial y de pantalla ---------- */
+let bursts=[],superFlash={t:0},screenFlash=0;
+function addBurst(x,y,col,max,w=7){bursts.push({x,y,r:6,max,col,w,life:0})}
 
 /* ---------- proyectiles y efectos ---------- */
 let projectiles=[],particles=[],popups=[];
@@ -550,7 +609,7 @@ function updateProjectiles(){
     if(p.kind==='roots'){
       const tg=fighters[0]===p.owner?fighters[1]:fighters[0];
       p.life++;
-      if(p.life===18){sfx.heavy();dust(p.x,GROUND,10);shake=Math.max(shake,4)}
+      if(p.life===18){sfx.heavy();dust(p.x,GROUND,10);shake=Math.max(shake,7);sparks(p.x,GROUND-20,22,'#8a5a30',p.owner.def.fx2);addBurst(p.x,GROUND-30,p.owner.def.fx2,70)}
       if(p.life>=18&&p.life<32&&!p.hit&&overlap({x:p.x-40,y:GROUND-140,w:80,h:140},tg.hurtbox())){
         p.hit=true;applyHit(p.owner,tg,ROOTS,Math.sign(tg.x-p.owner.x)||1,p.x,GROUND-70);
       }
@@ -563,6 +622,7 @@ function updateProjectiles(){
       // el pico va, frena y vuelve: puede golpear a la ida y a la vuelta
       const dir0=Math.sign(p.vx);
       p.vx-=Math.sign(p.vx0)*0.2;p.x+=p.vx;p.life++;
+      if(p.life%3===0)particles.push({x:p.x,y:p.y+rand(-10,10),vx:-p.vx*0.1,vy:rand(0.5,1.5),life:18,max:18,size:5,color:Math.random()<0.5?p.owner.def.fx:p.owner.def.fx2,g:0.05});
       const dir=Math.sign(p.vx);
       if(dir!==dir0)p.hitDir=0;
       if(p.hitDir!==dir&&overlap({x:p.x-20,y:p.y-20,w:40,h:40},target.hurtbox())){p.hitDir=dir;applyHit(p.owner,target,BOOM,dir||1,p.x,p.y)}
@@ -572,6 +632,7 @@ function updateProjectiles(){
     if(p.kind==='quake'){
       p.x+=p.vx;p.life++;
       if(p.life%3===0)dust(p.x,GROUND,2);
+      if(p.life%5===0){sparks(p.x,GROUND-10,4,p.owner.def.fx,p.owner.def.fx2);shake=Math.max(shake,2)}
       if(!p.hit&&target.grounded&&overlap({x:p.x-24,y:GROUND-44,w:48,h:44},target.hurtbox())){p.hit=true;p.alive=false;applyHit(p.owner,target,QUAKE,Math.sign(p.vx),p.x,GROUND-30)}
       if(p.x<-40||p.x>W+40)p.alive=false;
       continue;
@@ -650,7 +711,7 @@ function selRect(i){
 }
 const BACK_BTN={x:20,y:18,w:112,h:34};
 function newRound(){
-  fighters.forEach(f=>f.reset());projectiles=[];particles=[];popups=[];
+  fighters.forEach(f=>f.reset());projectiles=[];particles=[];popups=[];bursts=[];superFlash={t:0};screenFlash=0;
   timer=60*60;introT=120;phase='intro';paused=false;
 }
 function endRound(reason){
@@ -778,7 +839,9 @@ const R1=v=>Math.round(v*10)/10;
 function snapshot(){
   return{t:'snap',ph:phase,pa:paused,ro:round,ti:timer,it:introT,kt:koT,bn:banner,wi:winnerIdx,sh:R1(shake),fr:frame,
     si:stageIdx,sg:stageGoT,sr:stageRoll,sel,
-    f:fighters.map(f=>[R1(f.x),R1(f.y),f.facing,R1(f.hp),R1(f.dispHp),R1(f.meter),f.state,f.st,f.atkName||'',f.flash,R1(f.walkPhase),f.wins,f.defIdx===undefined?-1:f.defIdx,f.isAlt?1:0,f.combo]),
+    f:fighters.map(f=>[R1(f.x),R1(f.y),f.facing,R1(f.hp),R1(f.dispHp),R1(f.meter),f.state,f.st,f.atkName||'',f.flash,R1(f.walkPhase),f.wins,f.defIdx===undefined?-1:f.defIdx,f.isAlt?1:0,f.combo,Math.round(f.guard)]),
+    sf:superFlash.t>0?[superFlash.t,R1(superFlash.x),R1(superFlash.y),superFlash.col,superFlash.col2]:0,fl:screenFlash,
+    bu:bursts.map(b=>[Math.round(b.x),Math.round(b.y),Math.round(b.r),b.col,b.w,b.life]),
     p:projectiles.map(p=>[p.kind||'',p.style||'',R1(p.x),R1(p.y),R1(p.vx||0),p.life,fighters.indexOf(p.owner),p.dir||0]),
     pt:particles.slice(-90).map(p=>[Math.round(p.x),Math.round(p.y),Math.round(p.size),p.color,Math.round(p.life),p.max]),
     pu:popups.map(p=>[Math.round(p.x),Math.round(p.y),p.text,p.life,p.color]),
@@ -792,12 +855,14 @@ function applySnap(s){
     [f.x,f.y,f.facing,f.hp,f.dispHp,f.meter,f.state,f.st,f.atkName,f.flash,f.walkPhase,f.wins]=a;
     const di=a[12];
     if(di>=0&&(f.defIdx!==di||f.isAlt!==!!a[13])){f.defIdx=di;f.isAlt=!!a[13];f.def=f.isAlt?altDef(DEFS[di]):DEFS[di]}
-    f.combo=a[14];f.vy=f.y<GROUND?1:0;
+    f.combo=a[14];f.guard=a[15];f.vy=f.y<GROUND?1:0;
     f.atk=f.state==='attack'?(f.atkName==='special'?SPECIALS[f.def.sp]:f.atkName==='signature'?SIGS[f.def.sp]:ATK[f.atkName]):null;
   });
   projectiles=s.p.map(a=>({kind:a[0]||undefined,style:a[1]||undefined,x:a[2],y:a[3],vx:a[4],life:a[5],owner:fighters[a[6]],dir:a[7],alive:true}));
   particles=s.pt.map(a=>({x:a[0],y:a[1],size:a[2],color:a[3],life:a[4],max:a[5]}));
   popups=s.pu.map(a=>({x:a[0],y:a[1],text:a[2],life:a[3],color:a[4]}));
+  superFlash=s.sf?{t:s.sf[0],x:s.sf[1],y:s.sf[2],col:s.sf[3],col2:s.sf[4]}:{t:0};screenFlash=s.fl||0;
+  bursts=(s.bu||[]).map(a=>({x:a[0],y:a[1],r:a[2],col:a[3],w:a[4],life:a[5]}));
   s.snd.forEach(k=>SFX0[k]&&SFX0[k]());
 }
 const NET_BTNS=[{x:W/2-250,y:200,w:230,h:64,label:'CREAR SALA'},{x:W/2+20,y:200,w:230,h:64,label:'UNIRSE'}];
@@ -954,6 +1019,10 @@ function step(){
     pressed.clear();return;
   }
   // durante la pausa de impacto no se borran las teclas pulsadas, así el combo se puede marcar a tiempo
+  // los efectos siguen animándose aunque la acción esté congelada por el impacto
+  if(superFlash.t>0)superFlash.t--;
+  if(screenFlash>0)screenFlash--;
+  bursts.forEach(b=>{b.life++;b.r+=(b.max-b.r)*0.25});bursts=bursts.filter(b=>b.life<16);
   if(hitstop>0){hitstop--;return}
   if(phase==='ko'&&koSlow>0){koSlow--;if(koSlow%2===0)return}
   const [a,b]=fighters;
@@ -1375,11 +1444,23 @@ function getPose(f,time){
       else{const q=p;P.fE=L([-4,-108],[40,-120],q);P.fH=L([-16,-104],[70,-118],q);P.bE=L([-8,-106],[34,-114],q);P.bH=L([-20,-100],[64,-112],q);P.neck=[12,-134];P.head=[18,-156]}
       P.fF=[36,0];P.bF=[-32,0];P.fK=[22,-40];P.bK=[-18,-38];
     }
-  }else if(s==='hit'||s==='ko'){
+  }else if(s==='hit'||s==='ko'||s==='kd'||s==='down'||s==='getup'){
     const j=Math.min(1,st/4);
     P.neck=L(P.neck,[-14,-132],j);P.head=L(P.head,[-24,-150],j);P.hip=[-4,-76];
     P.fE=[0,-110];P.fH=[-14,-134];P.bE=[-14,-108];P.bH=[-32,-118];
-    if(s==='ko')P.rot=-Math.min(1,st/22)*Math.PI/2;
+    if(s==='ko'||s==='kd')P.rot=-Math.min(1,st/18)*Math.PI/2;
+    else if(s==='down')P.rot=-Math.PI/2;
+    else if(s==='getup')P.rot=-Math.PI/2*Math.max(0,1-st/14);
+  }else if(s==='dizzy'){
+    // aturdido: se tambalea con los brazos caídos
+    const w=Math.sin(time*0.16)*7;
+    P.hip=[w*0.4,-74];P.neck=[4+w,-130];P.head=[8+w*1.3,-151];
+    P.fE=[10+w,-100];P.fH=[14+w,-74];P.bE=[-6+w,-100];P.bH=[-4+w,-74];
+    P.fK=[18,-38];P.bK=[-14,-38];
+  }else if(s==='dashmove'){
+    P.hip=[4,-74];P.neck=[18,-130];P.head=[28,-150];
+    P.fK=[30,-44];P.fF=[40,-6];P.bK=[-20,-36];P.bF=[-44,-10];
+    P.fE=[34,-114];P.fH=[46,-134];P.bE=[-4,-106];P.bH=[-20,-96];
   }else if(s==='win'){
     const k=Math.min(1,st/10);
     P.fE=L(P.fE,[16,-170],k);P.fH=L(P.fH,[20,-204],k);P.bE=L(P.bE,[-18,-112],k);P.bH=L(P.bH,[-6,-88],k);
@@ -1443,6 +1524,35 @@ function drawFighter(c,f,time,shadow=true){
   part([[P.neck,P.fE,14,C('main')],[P.fE,P.fH,12,C('skin')],[P.fH,null,9,C('skin')]]);
   if(!fl){seg(c,L(P.neck,P.fE,0.25),L(P.neck,P.fE,0.7),4,HI('main'));dot(c,[P.fH[0]+2,P.fH[1]-3],3,HI('skin'))}
   c.restore();
+  // estrellitas girando sobre la cabeza cuando está aturdido
+  if(f.state==='dizzy'){
+    for(let i=0;i<3;i++){
+      const a=time*0.12+i*Math.PI*2/3,sx=f.x+Math.cos(a)*26,sy=f.y-192*sz+Math.sin(a)*7;
+      c.fillStyle=INK;c.fillRect(sx-5,sy-5,10,10);c.fillStyle='#ffd166';c.fillRect(sx-3,sy-3,6,6);c.fillRect(sx-6,sy-1,12,2);c.fillRect(sx-1,sy-6,2,12);
+    }
+  }
+}
+// anillos de impacto y destello de especial (en el mundo pixelado)
+function drawBursts(c){
+  bursts.forEach(b=>{
+    const k=b.life/16;c.globalAlpha=Math.max(0,1-k);
+    c.lineWidth=b.w+3;c.strokeStyle=INK;c.beginPath();c.arc(b.x,b.y,b.r,0,Math.PI*2);c.stroke();
+    c.lineWidth=b.w;c.strokeStyle=b.col;c.beginPath();c.arc(b.x,b.y,b.r,0,Math.PI*2);c.stroke();
+    // rayos
+    for(let i=0;i<8;i++){const a=i*Math.PI/4+b.life*0.05;seg(c,[b.x+Math.cos(a)*b.r*0.6,b.y+Math.sin(a)*b.r*0.6],[b.x+Math.cos(a)*b.r*1.15,b.y+Math.sin(a)*b.r*1.15],3,b.col)}
+  });
+  c.globalAlpha=1;
+}
+function drawSuperFlash(c){
+  const s=superFlash;if(!s||s.t<=0)return;
+  c.fillStyle=`rgba(0,0,0,${0.45*Math.min(1,s.t/6)})`;c.fillRect(0,0,W,H);
+  // haz de rayos detrás del luchador
+  for(let i=0;i<16;i++){
+    const a=i*Math.PI/8+s.t*0.08,len=120+(i%2)*80+(16-s.t)*10;
+    c.strokeStyle=i%2?s.col:s.col2;c.lineWidth=i%2?6:3;c.globalAlpha=0.85;
+    c.beginPath();c.moveTo(s.x+Math.cos(a)*30,s.y+Math.sin(a)*30);c.lineTo(s.x+Math.cos(a)*len,s.y+Math.sin(a)*len);c.stroke();
+  }
+  c.globalAlpha=1;dot(c,[s.x,s.y],22+(s.t%4),s.col);dot(c,[s.x,s.y],12,'#ffffff');
 }
 // rasgo propio de cada luchador en la cabeza (orejas, pico, hocico…)
 function drawDeco(c,deco,hx,hy,C,fl){
@@ -1534,6 +1644,10 @@ function drawProjectile(c,p){
     return;
   }
   const d=p.owner.def,s=Math.sign(p.vx),r=16+(p.life%8<4?2:0);
+  // halo y estela de imágenes que se desvanecen
+  c.globalAlpha=0.3;dot(c,[p.x,p.y],r*2.2,d.fx);c.globalAlpha=0.65;
+  for(let i=3;i>=1;i--)dot(c,[p.x-s*(18+i*15),p.y+Math.sin(p.life*0.4+i)*5],r*(0.55-i*0.1)+2,i%2?d.fx:d.fx2);
+  c.globalAlpha=1;
   dot(c,[p.x-s*16,p.y],r*0.55+3,INK);dot(c,[p.x-s*16,p.y],r*0.55,d.fx2);
   dot(c,[p.x,p.y],r+3,INK);dot(c,[p.x,p.y],r,d.fx2);
   dot(c,[p.x+s*3,p.y-1],r*0.68,d.fx);dot(c,[p.x+s*6,p.y-4],r*0.3,'#ffffff');
@@ -1564,12 +1678,17 @@ function drawHUD(c){
     c.fillStyle=lowHp?'#b8301a':'#e08a14';span(wh,by+bh-6,6);
     c.fillStyle='rgba(255,255,255,0.55)';span(wh,by+2,3);
     c.fillStyle=INK;for(let k=1;k<10;k++)c.fillRect(x0+k*bw/10-1,by,2,bh);
+    // guardia: se gasta al bloquear; vacía = aturdido
+    const gw=bw*Math.max(0,f.guard)/100,gy=by+bh+7;
+    c.fillStyle=INK;c.fillRect(x0-2,gy-2,bw+4,9);c.fillStyle='#1a2430';c.fillRect(x0,gy,bw,5);
+    c.fillStyle=f.state==='dizzy'?(frame%10<5?'#ff5a3d':'#ffd166'):f.guard<35?'#ff9a5a':'#7fb2ff';
+    if(i===0)c.fillRect(x0+bw-gw,gy,gw,5);else c.fillRect(x0,gy,gw,5);
     // nombre
-    otext(c,f.def.name,i===0?x0:x0+bw,by+bh+22,14,f.def.hud,i===0?'left':'right',0,2);
+    otext(c,f.def.name,i===0?x0:x0+bw,by+bh+28,14,f.def.hud,i===0?'left':'right',0,2);
     // victorias
     for(let k=0;k<2;k++){
       const cx=i===0?x0+bw-12-k*24:x0+12+k*24;
-      box(c,cx-6,by+bh+16,12,12,k<f.wins?'#ffd166':'#2a2622',2);
+      box(c,cx-6,by+bh+22,12,12,k<f.wins?'#ffd166':'#2a2622',2);
     }
     // energía
     const mw=220,mh=12,mx=i===0?52:W-52-mw,my=H-30;
@@ -1627,10 +1746,12 @@ function render(){
   else{
     // luchadores (el que ataca va delante)
     const order=[...fighters].sort((a,b)=>(a.state==='attack'?1:0)-(b.state==='attack'?1:0));
+    drawSuperFlash(c);
     order.forEach(f=>drawFighter(c,f,frame));
     projectiles.forEach(p=>drawProjectile(c,p));
     particles.forEach(p=>{c.globalAlpha=p.life/p.max>0.4?1:0.6;c.fillStyle=p.color;c.fillRect(p.x-p.size/2,p.y-p.size/2,p.size+1,p.size+1)});
     c.globalAlpha=1;
+    drawBursts(c);
   }
   ctx.setTransform(1,0,0,1,0,0);ctx.imageSmoothingEnabled=false;
   ctx.drawImage(low,0,0,cvs.width,cvs.height);
@@ -1640,6 +1761,7 @@ function render(){
   if(phase==='select'){drawSelectUI(ctx);return}
   if(phase==='stage'){drawStageUI(ctx);return}
   if(phase==='menu'){drawMenu(ctx);return}
+  if(screenFlash>0){ctx.fillStyle=`rgba(255,255,255,${0.1*screenFlash})`;ctx.fillRect(0,0,W,H)}
   drawHUD(ctx);
   if(phase==='intro'){
     if(introT>40)bigText(ctx,'RONDA '+round,H/2-40,48,'#ffd166');
@@ -1660,11 +1782,11 @@ function render(){
 /* Lista de combos que se ve en la pausa */
 const COMBO_LIST=[
   ['F F G','Patada del trueno'],['F F F','Gancho al cielo'],
-  ['F F F F','Gancho + remate'],['F F G F','Trueno + remate'],
-  ['G G','Barrida'],['G G G','Barrida + patada hacha'],
-  ['G G G F','Barrida, hacha + remate'],['G F F','Codazo + gancho'],
-  ['G F G','Codazo + trueno'],['ADEL+F','Embestida (sigue con F o G)'],
-  ['ADEL+G','Patada hacha'],['Salto G F G','Combo aéreo + picada']
+  ['G G','Barrida'],['F G G','Puño, patada y barrida'],
+  ['G F F','Codazo + gancho'],['G F G','Codazo + remate'],
+  ['ADEL+F G','Embestida + remate'],['ADEL+G','Patada hacha'],
+  ['Salto G F G','Combo aéreo + picada'],['A A / D D','Mini-dash'],
+  ['3 golpes','El rival cae al suelo'],['+ H','Cancela en especial']
 ];
 function drawComboList(c){
   otext(c,'PAUSA · COMBOS',W/2,52,22,'#f4e7c8','center',3,4);
